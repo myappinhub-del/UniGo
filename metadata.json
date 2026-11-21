@@ -1,0 +1,6 @@
+{
+  "name": "UniGo — Everything. Everywhere. One App.",
+  "description": "Commercial super app for food delivery, 10-minute groceries, shopping, bike/auto/car rides, home services, rentals, and parcel delivery.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

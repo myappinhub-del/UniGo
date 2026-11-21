@@ -1,0 +1,265 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "UniGo user account, role assignment, saved addresses, and wishlist",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 200, "description": "Account email address (may be empty for phone-only customer sign-ins)" },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 24 },
+        "role": {
+          "type": "string",
+          "enum": ["customer", "partner", "franchise_admin", "super_admin"]
+        },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "walletBalance": { "type": "number" },
+        "savedAddresses": { "type": "array", "maxLength": 10 },
+        "wishlistIds": { "type": "array", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "walletBalance", "createdAt", "updatedAt"]
+    },
+    "CatalogItem": {
+      "title": "CatalogItem",
+      "description": "Unified catalog entry for restaurants, dishes, groceries, products, services, and rentals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "vertical": {
+          "type": "string",
+          "enum": ["restaurant", "dish", "grocery", "shopping", "service", "rental"]
+        },
+        "title": { "type": "string", "maxLength": 140 },
+        "subtitle": { "type": "string", "maxLength": 240 },
+        "category": { "type": "string", "maxLength": 80 },
+        "parentId": { "type": "string", "maxLength": 128 },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "rating": { "type": "number" },
+        "etaMinutes": { "type": "integer" },
+        "isVeg": { "type": "boolean" },
+        "inStock": { "type": "boolean" },
+        "unitLabel": { "type": "string", "maxLength": 40 },
+        "specs": { "type": "array", "maxLength": 12 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "vertical", "title", "category", "price", "rating", "inStock", "franchiseZone", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order, ride booking, parcel delivery, home service appointment, or rental enquiry",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string", "maxLength": 40 },
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "vertical": {
+          "type": "string",
+          "enum": ["food", "grocery", "shopping", "ride", "service", "parcel", "rental"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["placed", "confirmed", "preparing", "en_route", "delivered", "completed", "cancelled"]
+        },
+        "items": { "type": "array", "maxLength": 50 },
+        "subtotal": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "platformFee": { "type": "number" },
+        "tax": { "type": "number" },
+        "discount": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 60 },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid", "cod", "refunded"] },
+        "pickupAddress": { "type": "string", "maxLength": 280 },
+        "deliveryAddress": { "type": "string", "maxLength": 280 },
+        "pickupCoords": { "type": "object" },
+        "deliveryCoords": { "type": "object" },
+        "distanceKm": { "type": "number" },
+        "partnerId": { "type": "string", "maxLength": 128 },
+        "partnerName": { "type": "string", "maxLength": 120 },
+        "scheduledSlot": { "type": "string", "maxLength": 80 },
+        "notes": { "type": "string", "maxLength": 400 },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "franchiseManagerUid": { "type": "string", "maxLength": 128 },
+        "opsAdminUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "vertical", "status", "total", "paymentMethod", "paymentStatus", "franchiseZone", "createdAt", "updatedAt"]
+    },
+    "DispatchJob": {
+      "title": "DispatchJob",
+      "description": "Non-PII partner dispatch board entry synchronized atomically with customer orders",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderNumber": { "type": "string", "maxLength": 40 },
+        "customerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "vertical": {
+          "type": "string",
+          "enum": ["food", "grocery", "shopping", "ride", "service", "parcel", "rental"]
+        },
+        "pickupArea": { "type": "string", "maxLength": 160 },
+        "dropArea": { "type": "string", "maxLength": 160 },
+        "pickupCoords": { "type": "object" },
+        "deliveryCoords": { "type": "object" },
+        "distanceKm": { "type": "number" },
+        "payoutAmount": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["open", "accepted", "en_route", "completed", "cancelled"]
+        },
+        "partnerId": { "type": "string", "maxLength": 128 },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderNumber", "customerId", "vertical", "pickupArea", "dropArea", "payoutAmount", "status", "franchiseZone", "createdAt", "updatedAt"]
+    },
+    "Partner": {
+      "title": "Partner",
+      "description": "Delivery rider, ride captain, or service technician profile and earnings ledger",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 120 },
+        "vehicleType": { "type": "string", "enum": ["bike", "auto", "car", "van", "technician"] },
+        "phone": { "type": "string", "maxLength": 24 },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "isOnline": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "completedJobs": { "type": "integer" },
+        "totalEarnings": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "vehicleType", "franchiseZone", "isOnline", "rating", "completedJobs", "totalEarnings", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time user notifications for orders, rides, and payouts",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 120 },
+        "body": { "type": "string", "maxLength": 320 },
+        "type": { "type": "string", "enum": ["order", "ride", "promo", "system"] },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "body", "type", "read", "createdAt"]
+    },
+    "FranchiseZone": {
+      "title": "FranchiseZone",
+      "description": "Regional franchise zone configuration with GPS map boundary managed by Super Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 100 },
+        "city": { "type": "string", "maxLength": 80 },
+        "managerEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "managerUid": { "type": "string", "maxLength": 128 },
+        "opsAdminUid": { "type": "string", "maxLength": 128 },
+        "commissionRate": { "type": "number" },
+        "centerLat": { "type": "number" },
+        "centerLng": { "type": "number" },
+        "radiusKm": { "type": "number" },
+        "boundaryMode": { "type": "string", "enum": ["radius", "polygon"] },
+        "boundaryPoints": { "type": "array", "maxLength": 25 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "city", "managerEmail", "commissionRate", "isActive", "createdAt", "updatedAt"]
+    },
+    "StaffAccount": {
+      "title": "StaffAccount",
+      "description": "Super Admin provisioned staff credentials metadata and role assignment for Partners, Franchise Admins, and Admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 24 },
+        "role": { "type": "string", "enum": ["partner", "franchise_admin", "super_admin"] },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "vehicleType": { "type": "string", "enum": ["bike", "auto", "car", "van", "technician"] },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "franchiseZone", "active", "createdBy", "createdAt", "updatedAt"]
+    },
+    "AdBanner": {
+      "title": "AdBanner",
+      "description": "Promotional advertisement banner published by Super Admin to the Customer storefront",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 140 },
+        "subtitle": { "type": "string", "maxLength": 240 },
+        "ctaLabel": { "type": "string", "maxLength": 40 },
+        "targetVertical": {
+          "type": "string",
+          "enum": ["food", "grocery", "shopping", "rides", "services", "rentals", "parcel"]
+        },
+        "promoCode": { "type": "string", "maxLength": 30 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "badgeText": { "type": "string", "maxLength": 40 },
+        "franchiseZone": { "type": "string", "maxLength": 80 },
+        "priority": { "type": "integer" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "subtitle", "ctaLabel", "targetVertical", "franchiseZone", "priority", "isActive", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user accounts, roles, saved addresses, and wishlist items"
+    },
+    "/catalog_items/{itemId}": {
+      "schema": { "$ref": "#/entities/CatalogItem" },
+      "description": "Publicly browsable multi-vertical catalog items"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders and service bookings with strict owner, assigned partner, and admin access"
+    },
+    "/dispatch_jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/DispatchJob" },
+      "description": "Non-PII partner job queue synchronized with orders"
+    },
+    "/partners/{partnerId}": {
+      "schema": { "$ref": "#/entities/Partner" },
+      "description": "Partner profiles, availability, and earnings"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User-scoped notifications"
+    },
+    "/franchise_zones/{zoneId}": {
+      "schema": { "$ref": "#/entities/FranchiseZone" },
+      "description": "Operational franchise zones with GPS map boundaries"
+    },
+    "/staff_directory/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffAccount" },
+      "description": "Super-Admin provisioned staff role assignments for Partner, Franchise Admin, and Admin logins"
+    },
+    "/ads/{adId}": {
+      "schema": { "$ref": "#/entities/AdBanner" },
+      "description": "Super-Admin managed promotional ads displayed across the customer home screen"
+    }
+  }
+}

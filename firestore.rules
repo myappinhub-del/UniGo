@@ -1,0 +1,555 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isPhoneVerifiedUser() {
+      return isSignedIn() && request.auth.token.phone_number is string && request.auth.token.phone_number.size() >= 6;
+    }
+
+    function isPasswordCustomer() {
+      return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function isProvisionedStaff() {
+      return isSignedIn() && exists(/databases/$(database)/documents/staff_directory/$(request.auth.uid));
+    }
+
+    function isActiveUser() {
+      return isVerifiedUser() || isPhoneVerifiedUser() || isPasswordCustomer() || isProvisionedStaff();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'myappinhub@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isActiveUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isFranchiseAdmin() {
+      return isActiveUser() && exists(/databases/$(database)/documents/franchise_admins/$(request.auth.uid));
+    }
+
+    function isAnyAdmin() {
+      return isAdmin() || isFranchiseAdmin();
+    }
+
+    function isValidCoords(coords) {
+      return coords is map
+        && coords.keys().hasAll(['lat', 'lng'])
+        && coords.keys().hasOnly(['lat', 'lng'])
+        && coords.lat is number && coords.lat >= -90 && coords.lat <= 90
+        && coords.lng is number && coords.lng >= -180 && coords.lng <= 180;
+    }
+
+    // 3. Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'walletBalance', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'role', 'franchiseZone', 'walletBalance', 'savedAddresses', 'wishlistIds', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 24))
+        && (data.email.size() >= 3 || ('phone' in data && data.phone is string && data.phone.size() >= 6))
+        && data.role in ['customer', 'partner', 'franchise_admin', 'super_admin']
+        && (!('franchiseZone' in data) || (data.franchiseZone is string && data.franchiseZone.size() <= 80))
+        && data.walletBalance is number && data.walletBalance >= 0 && data.walletBalance <= 1000000
+        && (!('savedAddresses' in data) || (data.savedAddresses is list && data.savedAddresses.size() <= 10 && (data.savedAddresses.size() == 0 || data.savedAddresses[0] is map)))
+        && (!('wishlistIds' in data) || (data.wishlistIds is list && data.wishlistIds.size() <= 100 && (data.wishlistIds.size() == 0 || data.wishlistIds[0] is string)))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaffRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'franchiseZone', 'active', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'role', 'franchiseZone', 'vehicleType', 'active', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 24))
+        && data.role in ['partner', 'franchise_admin', 'super_admin']
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && (!('vehicleType' in data) || data.vehicleType in ['bike', 'auto', 'car', 'van', 'technician'])
+        && data.active is bool
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCatalogItem(data) {
+      return data.keys().hasAll(['id', 'vertical', 'title', 'category', 'price', 'rating', 'inStock', 'franchiseZone', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'vertical', 'title', 'subtitle', 'category', 'parentId', 'price', 'originalPrice', 'rating', 'etaMinutes', 'isVeg', 'inStock', 'unitLabel', 'specs', 'imageUrl', 'franchiseZone', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.vertical in ['restaurant', 'dish', 'grocery', 'shopping', 'service', 'rental']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 240))
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && (!('parentId' in data) || (data.parentId is string && data.parentId.size() <= 128))
+        && data.price is number && data.price >= 0 && data.price <= 10000000
+        && (!('originalPrice' in data) || (data.originalPrice is number && data.originalPrice >= 0 && data.originalPrice <= 10000000))
+        && data.rating is number && data.rating >= 0 && data.rating <= 5
+        && (!('etaMinutes' in data) || (data.etaMinutes is int && data.etaMinutes >= 0 && data.etaMinutes <= 1440))
+        && (!('isVeg' in data) || data.isVeg is bool)
+        && data.inStock is bool
+        && (!('unitLabel' in data) || (data.unitLabel is string && data.unitLabel.size() <= 40))
+        && (!('specs' in data) || (data.specs is list && data.specs.size() <= 12 && (data.specs.size() == 0 || data.specs[0] is string)))
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500))
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['orderNumber', 'userId', 'vertical', 'status', 'total', 'paymentMethod', 'paymentStatus', 'franchiseZone', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['orderNumber', 'userId', 'userEmail', 'userName', 'vertical', 'status', 'items', 'subtotal', 'deliveryFee', 'platformFee', 'tax', 'discount', 'total', 'paymentMethod', 'paymentStatus', 'pickupAddress', 'deliveryAddress', 'pickupCoords', 'deliveryCoords', 'distanceKm', 'partnerId', 'partnerName', 'scheduledSlot', 'notes', 'franchiseZone', 'franchiseManagerUid', 'opsAdminUid', 'createdAt', 'updatedAt'])
+        && data.orderNumber is string && data.orderNumber.size() >= 3 && data.orderNumber.size() <= 40
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 200))
+        && (!('userName' in data) || (data.userName is string && data.userName.size() <= 120))
+        && data.vertical in ['food', 'grocery', 'shopping', 'ride', 'service', 'parcel', 'rental']
+        && data.status in ['placed', 'confirmed', 'preparing', 'en_route', 'delivered', 'completed', 'cancelled']
+        && (!('items' in data) || (data.items is list && data.items.size() <= 50 && (data.items.size() == 0 || data.items[0] is map)))
+        && (!('subtotal' in data) || (data.subtotal is number && data.subtotal >= 0 && data.subtotal <= 10000000))
+        && (!('deliveryFee' in data) || (data.deliveryFee is number && data.deliveryFee >= 0 && data.deliveryFee <= 50000))
+        && (!('platformFee' in data) || (data.platformFee is number && data.platformFee >= 0 && data.platformFee <= 5000))
+        && (!('tax' in data) || (data.tax is number && data.tax >= 0 && data.tax <= 500000))
+        && (!('discount' in data) || (data.discount is number && data.discount >= 0 && data.discount <= 500000))
+        && data.total is number && data.total >= 0 && data.total <= 10000000
+        && data.paymentMethod is string && data.paymentMethod.size() >= 1 && data.paymentMethod.size() <= 60
+        && data.paymentStatus in ['pending', 'paid', 'cod', 'refunded']
+        && (!('pickupAddress' in data) || (data.pickupAddress is string && data.pickupAddress.size() <= 280))
+        && (!('deliveryAddress' in data) || (data.deliveryAddress is string && data.deliveryAddress.size() <= 280))
+        && (!('pickupCoords' in data) || isValidCoords(data.pickupCoords))
+        && (!('deliveryCoords' in data) || isValidCoords(data.deliveryCoords))
+        && (!('distanceKm' in data) || (data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 2000))
+        && (!('partnerId' in data) || (data.partnerId is string && data.partnerId.size() <= 128))
+        && (!('partnerName' in data) || (data.partnerName is string && data.partnerName.size() <= 120))
+        && (!('scheduledSlot' in data) || (data.scheduledSlot is string && data.scheduledSlot.size() <= 80))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 400))
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && (!('franchiseManagerUid' in data) || (data.franchiseManagerUid is string && data.franchiseManagerUid.size() <= 128))
+        && (!('opsAdminUid' in data) || (data.opsAdminUid is string && data.opsAdminUid.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDispatchJob(data) {
+      return data.keys().hasAll(['orderId', 'orderNumber', 'customerId', 'vertical', 'pickupArea', 'dropArea', 'payoutAmount', 'status', 'franchiseZone', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['orderId', 'orderNumber', 'customerId', 'vertical', 'pickupArea', 'dropArea', 'pickupCoords', 'deliveryCoords', 'distanceKm', 'payoutAmount', 'status', 'partnerId', 'franchiseZone', 'createdAt', 'updatedAt'])
+        && data.orderId is string && data.orderId.size() >= 1 && data.orderId.size() <= 128
+        && data.orderNumber is string && data.orderNumber.size() >= 3 && data.orderNumber.size() <= 40
+        && data.customerId is string && data.customerId.size() >= 1 && data.customerId.size() <= 128
+        && data.vertical in ['food', 'grocery', 'shopping', 'ride', 'service', 'parcel', 'rental']
+        && data.pickupArea is string && data.pickupArea.size() >= 1 && data.pickupArea.size() <= 160
+        && data.dropArea is string && data.dropArea.size() >= 1 && data.dropArea.size() <= 160
+        && (!('pickupCoords' in data) || isValidCoords(data.pickupCoords))
+        && (!('deliveryCoords' in data) || isValidCoords(data.deliveryCoords))
+        && (!('distanceKm' in data) || (data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 2000))
+        && data.payoutAmount is number && data.payoutAmount >= 0 && data.payoutAmount <= 100000
+        && data.status in ['open', 'accepted', 'en_route', 'completed', 'cancelled']
+        && (!('partnerId' in data) || (data.partnerId is string && data.partnerId.size() <= 128))
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPartner(data) {
+      return data.keys().hasAll(['uid', 'name', 'vehicleType', 'franchiseZone', 'isOnline', 'rating', 'completedJobs', 'totalEarnings', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'name', 'vehicleType', 'phone', 'franchiseZone', 'isOnline', 'rating', 'completedJobs', 'totalEarnings', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.vehicleType in ['bike', 'auto', 'car', 'van', 'technician']
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 24))
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && data.isOnline is bool
+        && data.rating is number && data.rating >= 0 && data.rating <= 5
+        && data.completedJobs is int && data.completedJobs >= 0 && data.completedJobs <= 1000000
+        && data.totalEarnings is number && data.totalEarnings >= 0 && data.totalEarnings <= 100000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'body', 'type', 'read', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'title', 'body', 'type', 'orderId', 'read', 'createdAt'])
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 320
+        && data.type in ['order', 'ride', 'promo', 'system']
+        && (!('orderId' in data) || (data.orderId is string && data.orderId.size() <= 128))
+        && data.read is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFranchiseZone(data) {
+      return data.keys().hasAll(['id', 'name', 'city', 'managerEmail', 'commissionRate', 'isActive', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'name', 'city', 'managerEmail', 'managerUid', 'opsAdminUid', 'commissionRate', 'centerLat', 'centerLng', 'radiusKm', 'boundaryMode', 'boundaryPoints', 'isActive', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.city is string && data.city.size() >= 1 && data.city.size() <= 80
+        && data.managerEmail is string && data.managerEmail.size() >= 3 && data.managerEmail.size() <= 200
+        && (!('managerUid' in data) || (data.managerUid is string && data.managerUid.size() <= 128))
+        && (!('opsAdminUid' in data) || (data.opsAdminUid is string && data.opsAdminUid.size() <= 128))
+        && data.commissionRate is number && data.commissionRate >= 0 && data.commissionRate <= 100
+        && (!('centerLat' in data) || (data.centerLat is number && data.centerLat >= -90 && data.centerLat <= 90))
+        && (!('centerLng' in data) || (data.centerLng is number && data.centerLng >= -180 && data.centerLng <= 180))
+        && (!('radiusKm' in data) || (data.radiusKm is number && data.radiusKm >= 0.2 && data.radiusKm <= 150))
+        && (!('boundaryMode' in data) || data.boundaryMode in ['radius', 'polygon'])
+        && (!('boundaryPoints' in data) || (data.boundaryPoints is list && data.boundaryPoints.size() <= 25 && (data.boundaryPoints.size() == 0 || isValidCoords(data.boundaryPoints[0]))))
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdBanner(data) {
+      return data.keys().hasAll(['id', 'title', 'subtitle', 'ctaLabel', 'targetVertical', 'franchiseZone', 'priority', 'isActive', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'subtitle', 'ctaLabel', 'targetVertical', 'promoCode', 'imageUrl', 'badgeText', 'franchiseZone', 'priority', 'isActive', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.subtitle is string && data.subtitle.size() >= 1 && data.subtitle.size() <= 240
+        && data.ctaLabel is string && data.ctaLabel.size() >= 1 && data.ctaLabel.size() <= 40
+        && data.targetVertical in ['food', 'grocery', 'shopping', 'rides', 'services', 'rentals', 'parcel']
+        && (!('promoCode' in data) || (data.promoCode is string && data.promoCode.size() <= 30))
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500))
+        && (!('badgeText' in data) || (data.badgeText is string && data.badgeText.size() <= 40))
+        && data.franchiseZone is string && data.franchiseZone.size() >= 1 && data.franchiseZone.size() <= 80
+        && data.priority is int && data.priority >= 1 && data.priority <= 100
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules
+    match /test/connection {
+      allow get: if true;
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update, delete: if isValidId(adminId) && isBootstrappedAdmin();
+    }
+
+    match /franchise_admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update, delete: if isValidId(adminId) && isAdmin();
+    }
+
+    match /staff_directory/{staffId} {
+      allow get: if isValidId(staffId) && isSignedIn() && (isOwner(staffId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(staffId)
+        && isAdmin()
+        && isValidStaffRecord(incoming())
+        && incoming().uid == staffId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(staffId)
+        && isAdmin()
+        && isValidStaffRecord(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(staffId) && isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isActiveUser()
+        && isValidUser(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (userId == request.auth.uid && incoming().role == 'customer')
+        );
+      allow update: if isValidId(userId)
+        && isActiveUser()
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().walletBalance == existing().walletBalance
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'franchiseZone', 'savedAddresses', 'wishlistIds', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /catalog_items/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create: if isValidId(itemId)
+        && isAnyAdmin()
+        && isValidCatalogItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(itemId)
+        && isAnyAdmin()
+        && isValidCatalogItem(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(itemId) && isAnyAdmin();
+    }
+
+    match /ads/{adId} {
+      allow get: if isValidId(adId);
+      allow list: if true;
+      allow create: if isValidId(adId)
+        && isAdmin()
+        && isValidAdBanner(incoming())
+        && incoming().id == adId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(adId)
+        && isAdmin()
+        && isValidAdBanner(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(adId) && isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        isAnyAdmin() ||
+        existing().userId == request.auth.uid ||
+        existing().partnerId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        resource.data.franchiseManagerUid == request.auth.uid ||
+        resource.data.opsAdminUid == request.auth.uid
+      );
+      allow create: if isValidId(orderId)
+        && isActiveUser()
+        && isValidOrder(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'placed'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(orderId)
+        && isActiveUser()
+        && isValidOrder(incoming())
+        && incoming().userId == existing().userId
+        && incoming().orderNumber == existing().orderNumber
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isFranchiseAdmin() &&
+            existing().franchiseManagerUid == request.auth.uid
+          ) ||
+          (
+            !(existing().status in ['delivered', 'completed', 'cancelled']) && (
+              // Customer cancels placed order
+              (
+                existing().userId == request.auth.uid
+                && existing().status == 'placed'
+                && incoming().status == 'cancelled'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              ) ||
+              // Partner accepts open order (atomic with dispatch_jobs)
+              (
+                (!('partnerId' in existing()) || existing().partnerId == '')
+                && incoming().partnerId == request.auth.uid
+                && incoming().status == 'confirmed'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['partnerId', 'partnerName', 'status', 'updatedAt'])
+                && getAfter(/databases/$(database)/documents/dispatch_jobs/$(orderId)).data.partnerId == request.auth.uid
+              ) ||
+              // Assigned partner updates delivery/ride status
+              (
+                existing().partnerId == request.auth.uid
+                && incoming().partnerId == existing().partnerId
+                && incoming().status in ['preparing', 'en_route', 'delivered', 'completed']
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              )
+            )
+          )
+        );
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    match /dispatch_jobs/{jobId} {
+      allow get: if isValidId(jobId) && isSignedIn() && (
+        isAnyAdmin() ||
+        existing().customerId == request.auth.uid ||
+        existing().partnerId == request.auth.uid ||
+        existing().status == 'open'
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        resource.data.status == 'open'
+      );
+      allow create: if isValidId(jobId)
+        && isActiveUser()
+        && isValidDispatchJob(incoming())
+        && incoming().orderId == jobId
+        && incoming().customerId == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/orders/$(jobId));
+      allow update: if isValidId(jobId)
+        && isActiveUser()
+        && isValidDispatchJob(incoming())
+        && incoming().orderId == existing().orderId
+        && incoming().orderNumber == existing().orderNumber
+        && incoming().customerId == existing().customerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAnyAdmin() ||
+          (
+            !(existing().status in ['completed', 'cancelled']) && (
+              (
+                existing().customerId == request.auth.uid
+                && existing().status == 'open'
+                && incoming().status == 'cancelled'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              ) ||
+              (
+                existing().status == 'open'
+                && incoming().status == 'accepted'
+                && incoming().partnerId == request.auth.uid
+                && incoming().diff(existing()).affectedKeys().hasOnly(['partnerId', 'status', 'updatedAt'])
+                && getAfter(/databases/$(database)/documents/orders/$(jobId)).data.partnerId == request.auth.uid
+              ) ||
+              (
+                existing().partnerId == request.auth.uid
+                && incoming().partnerId == existing().partnerId
+                && incoming().status in ['en_route', 'completed']
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+              )
+            )
+          )
+        );
+      allow delete: if isValidId(jobId) && isAdmin();
+    }
+
+    match /partners/{partnerId} {
+      allow get: if isValidId(partnerId) && isSignedIn() && (isOwner(partnerId) || isAdmin());
+      allow list: if isSignedIn() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isValidId(partnerId)
+        && isActiveUser()
+        && isValidPartner(incoming())
+        && incoming().uid == partnerId
+        && incoming().completedJobs == 0
+        && incoming().totalEarnings == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || partnerId == request.auth.uid);
+      allow update: if isValidId(partnerId)
+        && isActiveUser()
+        && isValidPartner(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(partnerId)
+            && incoming().rating == existing().rating
+            && incoming().completedJobs >= existing().completedJobs
+            && incoming().completedJobs <= existing().completedJobs + 1
+            && incoming().totalEarnings >= existing().totalEarnings
+            && incoming().totalEarnings <= existing().totalEarnings + 50000
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'vehicleType', 'phone', 'franchiseZone', 'isOnline', 'completedJobs', 'totalEarnings', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(partnerId) && isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (isBootstrappedAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isValidId(notificationId)
+        && isActiveUser()
+        && isValidNotification(incoming())
+        && incoming().createdAt == request.time
+        && (
+          incoming().userId == request.auth.uid ||
+          isAdmin() ||
+          (
+            'orderId' in incoming()
+            && isValidId(incoming().orderId)
+            && get(/databases/$(database)/documents/orders/$(incoming().orderId)).data.partnerId == request.auth.uid
+            && get(/databases/$(database)/documents/orders/$(incoming().orderId)).data.userId == incoming().userId
+          )
+        );
+      allow update: if isValidId(notificationId)
+        && isActiveUser()
+        && isValidNotification(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    match /franchise_zones/{zoneId} {
+      allow get: if isValidId(zoneId);
+      allow list: if true;
+      allow create: if isValidId(zoneId)
+        && isAdmin()
+        && isValidFranchiseZone(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(zoneId)
+        && isAdmin()
+        && isValidFranchiseZone(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(zoneId) && isAdmin();
+    }
+  }
+}
